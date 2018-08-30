@@ -9,6 +9,7 @@ import (
 	"github.com/openshift/api/config"
 	"github.com/openshift/api/image"
 	"github.com/openshift/api/kubecontrolplane"
+	_ "github.com/openshift/api/legacyconfig/v1"
 	"github.com/openshift/api/network"
 	"github.com/openshift/api/oauth"
 	"github.com/openshift/api/operator"
