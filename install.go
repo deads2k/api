@@ -8,9 +8,11 @@ import (
 	"github.com/openshift/api/build"
 	"github.com/openshift/api/config"
 	"github.com/openshift/api/image"
+	"github.com/openshift/api/kubecontrolplane"
 	"github.com/openshift/api/network"
 	"github.com/openshift/api/oauth"
 	"github.com/openshift/api/operator"
+	"github.com/openshift/api/osin"
 	"github.com/openshift/api/project"
 	"github.com/openshift/api/quota"
 	"github.com/openshift/api/route"
@@ -28,9 +30,11 @@ var (
 		build.Install,
 		config.Install,
 		image.Install,
+		kubecontrolplane.Install,
 		network.Install,
 		oauth.Install,
 		operator.Install,
+		osin.Install,
 		project.Install,
 		quota.Install,
 		route.Install,
