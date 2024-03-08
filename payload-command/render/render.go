@@ -70,10 +70,19 @@ func (o *RenderOpts) Run() error {
 		if err != nil {
 			return fmt.Errorf("error converting FeatureGate: %w", err)
 		}
-		currentDetails, err := FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, o.PayloadVersion)
-		if err != nil {
-			return fmt.Errorf("error determining FeatureGates: %w", err)
+
+		// if the manifest has cluster profiles specified, the manifest's list must include the configured clusterprofile.
+		manifestClusterProfiles := clusterProfilesFrom(featureGates.Annotations)
+		switch {
+		case len(manifestClusterProfiles) > 0 && !manifestClusterProfiles.Has(o.ClusterProfile):
+			return fmt.Errorf("manifest has cluster-profile preferences (%v) that do not contain the configured clusterProfile: %q",
+				manifestClusterProfiles.UnsortedList(), o.ClusterProfile)
+		case len(manifestClusterProfiles) == 0 && len(o.ClusterProfile) != 0:
+			featureGates.Annotations[o.ClusterProfile] = "true"
 		}
+
+		featureGateStatus := configv1.FeatureSets(configv1.ClusterProfileName(o.ClusterProfile), featureGates.Spec.FeatureSet)
+		currentDetails := FeaturesGateDetailsFromFeatureSets(featureGateStatus, o.PayloadVersion)
 		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
 
 		featureGateOutBytes := writeFeatureGateV1OrDie(featureGates)
@@ -95,6 +104,16 @@ func (o *RenderOpts) Run() error {
 	}
 
 	return nil
+}
+
+func clusterProfilesFrom(annotations map[string]string) sets.Set[string] {
+	ret := sets.New[string]()
+	for k, v := range annotations {
+		if strings.HasSuffix(k, "include.release.openshift.io/") && v == "true" {
+			ret.Insert(k)
+		}
+	}
+	return ret
 }
 
 func featureGateManifests(renderedManifestInputFilenames []string) (assets.RenderedManifests, error) {
@@ -123,30 +142,22 @@ func featureGateManifests(renderedManifestInputFilenames []string) (assets.Rende
 	return featureGates, nil
 }
 
-func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
-	enabled, disabled, err := featuresGatesFromFeatureSets(featureSetMap, featureGates)
-	if err != nil {
-		return nil, err
-	}
+func FeaturesGateDetailsFromFeatureSets(featureGateStatus *configv1.FeatureGateEnabledDisabled, currentVersion string) *configv1.FeatureGateDetails {
 	currentDetails := configv1.FeatureGateDetails{
 		Version: currentVersion,
 	}
-	for _, gateName := range enabled {
-		currentDetails.Enabled = append(currentDetails.Enabled, configv1.FeatureGateAttributes{
-			Name: gateName,
-		})
+	for _, gateName := range featureGateStatus.Enabled {
+		currentDetails.Enabled = append(currentDetails.Enabled, *gateName.FeatureGateAttributes.DeepCopy())
 	}
-	for _, gateName := range disabled {
-		currentDetails.Disabled = append(currentDetails.Disabled, configv1.FeatureGateAttributes{
-			Name: gateName,
-		})
+	for _, gateName := range featureGateStatus.Disabled {
+		currentDetails.Disabled = append(currentDetails.Disabled, *gateName.FeatureGateAttributes.DeepCopy())
 	}
 
 	// sort for stability
 	sort.Sort(byName(currentDetails.Enabled))
 	sort.Sort(byName(currentDetails.Disabled))
 
-	return &currentDetails, nil
+	return &currentDetails
 }
 
 type byName []configv1.FeatureGateAttributes
